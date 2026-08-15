@@ -1,0 +1,28 @@
+{
+  "name": "@volksverpetzer/whitelist-ip",
+  "version": "0.1.0",
+  "description": "CLI that adds your current public IPv4 to a Scaleway Managed Database instance's ACL allow list. Run via `npx @volksverpetzer/whitelist-ip` from any repo instead of keeping a repo-local copy of the script.",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Volksverpetzer/vvp_tools.git",
+    "directory": "packages/whitelist-ip"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "bin"
+  ],
+  "bin": {
+    "whitelist-ip": "./bin/whitelist-ip.mjs"
+  },
+  "scripts": {
+    "build": "echo 'no build step (plain ESM script)'",
+    "check:ts": "node --check bin/whitelist-ip.mjs"
+  }
+}

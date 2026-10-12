@@ -9,6 +9,9 @@ for that.
 - [`packages/whitelist-ip`](packages/whitelist-ip) — `@volksverpetzer/whitelist-ip`.
   Adds your current public IPv4 to a Scaleway Managed Database instance's ACL
   allow list.
+- [`wp/content-cleanup`](wp/content-cleanup) — rule-based `wp eval-file` script
+  that removes old snippets (ads, dead shortcodes, …) from WordPress post
+  content. Not an npm package; copy the folder to the server.
 
 ## Consuming
 

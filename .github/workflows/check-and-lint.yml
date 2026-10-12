@@ -44,3 +44,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+  wp-content-cleanup:
+    name: 🧹 WP content cleanup rule tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: ⬇️ Checkout repo
+        uses: actions/checkout@v7
+
+      - name: 🧪 Run rule tests
+        working-directory: wp/content-cleanup
+        run: |
+          php --version
+          failed=0
+          for rule in rules/[!_]*.php rules/_template.php; do
+            name=$(basename "$rule" .php)
+            echo "### $name"
+            php cleanup.php "$name" test || failed=1
+          done
+          exit $failed

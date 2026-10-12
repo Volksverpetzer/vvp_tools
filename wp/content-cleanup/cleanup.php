@@ -140,7 +140,11 @@ function vvp_cleanup_content( string $content, array $rule ): array {
 	return [ $new, count( $removed ), $removed ];
 }
 
-/** Short, comparable form of a snippet for grouping: tags stripped, whitespace and numbers collapsed. */
+/**
+ * Short, comparable form of a snippet for grouping: whitespace and numbers (slot IDs, dates …) collapsed.
+ * Tags are deliberately kept – for leftovers the HTML is what tells variants apart (e.g. an <ins> with
+ * injected aswift_N wrappers). Callers strip tags themselves where only the text matters.
+ */
 function vvp_cleanup_fingerprint( string $html, int $length = 100 ): string {
 	$text = preg_replace( [ '/\s+/', '/\d+/' ], [ ' ', 'N' ], $html );
 	return mb_substr( trim( $text ), 0, $length );
@@ -294,6 +298,23 @@ foreach ( $rows as $row ) {
 	if ( 0 === $count ) {
 		continue;
 	}
+
+	if ( $apply ) {
+		// Optimistic lock: only write if the post still has the content we cleaned, so an edit saved
+		// while this runs is never overwritten. Anything but exactly one updated row counts as skipped.
+		$updated = $wpdb->update(
+			$wpdb->posts,
+			[ 'post_content' => $new ],
+			[ 'ID' => $row->ID, 'post_content' => $row->post_content ]
+		);
+		if ( 1 !== $updated ) {
+			$reason    = false === $updated ? 'db error: ' . $wpdb->last_error : 'changed since read';
+			$skipped[] = "{$row->ID}\t{$row->post_name}\t(not written: $reason)";
+			continue;
+		}
+		clean_post_cache( (int) $row->ID );
+	}
+
 	$cleaned++;
 	$total += $count;
 
@@ -301,10 +322,6 @@ foreach ( $rows as $row ) {
 		foreach ( $removed as $snippet ) {
 			vvp_cleanup_add_group( $matched, vvp_cleanup_fingerprint( wp_strip_all_tags( $snippet ) ?: $snippet ), (int) $row->ID );
 		}
-	}
-	if ( $apply ) {
-		$wpdb->update( $wpdb->posts, [ 'post_content' => $new ], [ 'ID' => $row->ID ] );
-		clean_post_cache( (int) $row->ID );
 	}
 }
 

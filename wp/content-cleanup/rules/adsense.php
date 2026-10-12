@@ -8,7 +8,8 @@
  * when copied from the live DOM), push script, and the bare push line left after <script> was stripped.
  *
  * Slots are only removed for our old publisher ID; the slot IDs varied, the publisher ID did not.
- * Any other AdSense slot stays and shows up as a leftover in the dry run / survey.
+ * A post that also contains a slot of any other publisher is skipped entirely (listed, never written),
+ * so its loader and push script are not taken away from it.
  */
 
 $client = 'ca-pub-5940101755599596';
@@ -24,6 +25,7 @@ return [
 	'description' => 'Old Google AdSense in-article ads',
 	'like'        => [ '%adsbygoogle%' ],
 	'needle'      => 'adsbygoogle',
+	'skip_post_if' => '<ins class="adsbygoogle"(?![^>]*\bdata-ad-client="' . preg_quote( $client, '#' ) . '")[^>]*>',
 	'pattern'     => '<script[^>]*adsbygoogle\.js[^>]*>\s*</script>'
 		. '|<ins class="adsbygoogle"[^>]*\bdata-ad-client="' . preg_quote( $client, '#' ) . '"[^>]*>(?:<ins id="aswift_\d+_expand"[^>]*><ins id="aswift_\d+_anchor"[^>]*></ins></ins>)?\s*</ins>'
 		. "|<script[^>]*>{$space}{$push}{$space}</script>"
@@ -58,9 +60,17 @@ return [
 			'in'  => "Proteste sein.\n\nA<ins class=\"adsbygoogle\" data-ad-layout=\"in-article\" data-ad-format=\"fluid\" data-ad-client=\"ca-pub-5940101755599596\" data-ad-slot=\"9775095125\" data-adsbygoogle-status=\"done\"><ins id=\"aswift_1_expand\"><ins id=\"aswift_1_anchor\"></ins></ins></ins>uch andere rechte Blogs",
 			'out' => "Proteste sein.\n\nAuch andere rechte Blogs",
 		],
-		'slot of another publisher is kept' => [
-			'in'  => "<p>Text.</p>\n<ins class=\"adsbygoogle\" data-ad-client=\"ca-pub-0000000000000000\" data-ad-slot=\"1\"></ins>\n<p>Mehr.</p>",
-			'out' => "<p>Text.</p>\n<ins class=\"adsbygoogle\" data-ad-client=\"ca-pub-0000000000000000\" data-ad-slot=\"1\"></ins>\n<p>Mehr.</p>",
+		'post with another publisher\'s slot is skipped, loader and push included' => [
+			'in'  => "<p>Text.</p>\n<script async src=\"//pagead2.googlesyndication.com/pagead/js/adsbygoogle.js\"></script>\n<ins class=\"adsbygoogle\" data-ad-client=\"ca-pub-0000000000000000\" data-ad-slot=\"1\"></ins>\n<script>(adsbygoogle = window.adsbygoogle || []).push({});</script>\n<p>Mehr.</p>\n$insB",
+			'out' => 'SKIP',
+		],
+		'post that is only an ad is skipped, not emptied' => [
+			'in'  => "<p>$insB</p>",
+			'out' => 'SKIP',
+		],
+		'image-only post counts as content' => [
+			'in'  => "<p><img src=\"x.jpg\" alt=\"\" /></p>\n<p>$insB</p>",
+			'out' => "<p><img src=\"x.jpg\" alt=\"\" /></p>\n\n",
 		],
 		'paragraph with real text keeps the text' => [
 			'in'  => "<!-- wp:paragraph -->\n<p>Echter Text. $insB</p>\n<!-- /wp:paragraph -->",

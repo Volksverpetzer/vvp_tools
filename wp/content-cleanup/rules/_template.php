@@ -10,6 +10,7 @@
  * - rejoins a word when the snippet was pasted mid-word ("A<snippet>uch" → "Auch"),
  *   otherwise leaves a paragraph break
  * - skips (never writes) a post on regex errors, changed tag balance or empty result
+ * - on apply, never overwrites a post that was edited after it was read
  */
 
 return [
@@ -32,6 +33,10 @@ return [
 	// Optional: decide per match whether to remove it (true) or keep it (false). $m holds the
 	// pattern's capture groups, e.g. to keep boxes with editorial content.
 	// 'remove'   => fn( array $m ): bool => true,
+
+	// Optional: PCRE without delimiters. Posts matching it are left completely untouched and listed as
+	// skipped – e.g. when they contain something the removed pieces still belong to.
+	// 'skip_post_if' => '<div class="old-widget" data-keep>',
 
 	// Optional: defaults to published posts and pages.
 	// 'post_types' => [ 'post', 'page' ],

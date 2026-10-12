@@ -30,7 +30,7 @@ const VVP_CLEANUP_SPACE = '(?:\s|&nbsp;|<br\s*/?>)*+';
 const VVP_CLEANUP_BALANCED_TAGS = [ 'p', 'em', 'strong', 'b', 'i', 'a', 'div', 'span', 'blockquote', 'ul', 'ol', 'li', 'h2', 'h3', 'h4' ];
 
 function vvp_cleanup_preg( $result ) {
-	if ( null === $result ) {
+	if ( null === $result || false === $result ) {
 		throw new RuntimeException( 'preg error ' . preg_last_error() . ' (' . preg_last_error_msg() . ')' );
 	}
 	return $result;
@@ -48,6 +48,7 @@ function vvp_cleanup_load_rule( string $name ): array {
 		'needle'      => null,
 		'flags'       => 's',
 		'remove'      => null,
+		'skip_post_if' => null,
 		'post_types'  => [ 'post', 'page' ],
 		'statuses'    => [ 'publish' ],
 		'tests'       => [],
@@ -73,9 +74,14 @@ function vvp_cleanup_tag_balance( string $html ): array {
  *    any other marker becomes a paragraph break.
  *
  * @return array{0:string,1:int,2:string[]} New content, number of removals, removed snippets.
- * @throws RuntimeException When the post would be damaged (regex failure, tag balance changed, empty result).
+ * @throws RuntimeException When the post would be damaged (regex failure, tag balance changed, empty result)
+ *                          or matches the rule's skip_post_if pattern.
  */
 function vvp_cleanup_content( string $content, array $rule ): array {
+	if ( $rule['skip_post_if'] && vvp_cleanup_preg( preg_match( '#' . $rule['skip_post_if'] . '#' . $rule['flags'], $content ) ) ) {
+		throw new RuntimeException( 'matches skip_post_if, left untouched' );
+	}
+
 	$removed = [];
 	$before  = vvp_cleanup_tag_balance( $content );
 	$mark    = VVP_CLEANUP_MARK;
@@ -133,7 +139,9 @@ function vvp_cleanup_content( string $content, array $rule ): array {
 	if ( vvp_cleanup_tag_balance( $new ) !== $before ) {
 		throw new RuntimeException( 'tag balance would change' );
 	}
-	if ( '' === trim( strip_tags( $new ) ) && '' !== trim( strip_tags( $content ) ) ) {
+	// Text, images and embeds count as content; whitespace, &nbsp; and empty markup do not.
+	$visible = strip_tags( str_ireplace( '&nbsp;', ' ', $new ), '<img><iframe><video><audio><embed><object><svg>' );
+	if ( '' === trim( $visible ) ) {
 		throw new RuntimeException( 'post would be empty' );
 	}
 
@@ -230,7 +238,10 @@ try {
 $mode = $args[1] ?? 'dry';
 
 if ( 'test' === $mode ) {
-	vvp_cleanup_run_tests( $rule );
+	$failed = vvp_cleanup_run_tests( $rule );
+	if ( $failed ) {
+		WP_CLI::error( "$failed test(s) failed." );
+	}
 	return;
 }
 
@@ -263,7 +274,7 @@ $like  = implode( ' OR ', array_fill( 0, count( $rule['like'] ), 'post_content L
 $types = implode( ',', array_fill( 0, count( $rule['post_types'] ), '%s' ) );
 $stats = implode( ',', array_fill( 0, count( $rule['statuses'] ), '%s' ) );
 $rows  = $wpdb->get_results( $wpdb->prepare(
-	"SELECT ID, post_name, post_content FROM {$wpdb->posts}
+	"SELECT ID, post_name, post_content, post_modified_gmt FROM {$wpdb->posts}
 	 WHERE ($like) AND post_type IN ($types) AND post_status IN ($stats)
 	 ORDER BY ID",
 	...array_merge( $rule['like'], $rule['post_types'], $rule['statuses'] )
@@ -300,13 +311,18 @@ foreach ( $rows as $row ) {
 	}
 
 	if ( $apply ) {
-		// Optimistic lock: only write if the post still has the content we cleaned, so an edit saved
-		// while this runs is never overwritten. Anything but exactly one updated row counts as skipped.
-		$updated = $wpdb->update(
-			$wpdb->posts,
-			[ 'post_content' => $new ],
-			[ 'ID' => $row->ID, 'post_content' => $row->post_content ]
-		);
+		// Optimistic lock: only write if the post is still exactly what we read, so an edit saved while
+		// this runs is never overwritten. Comparing as binary makes it byte-exact (the column's collation
+		// ignores case and trailing spaces); post_modified_gmt catches any save through WordPress.
+		// Anything but exactly one updated row counts as skipped.
+		$updated = $wpdb->query( $wpdb->prepare(
+			"UPDATE {$wpdb->posts} SET post_content = %s
+			 WHERE ID = %d AND post_modified_gmt = %s AND post_content = CAST(%s AS BINARY)",
+			$new,
+			$row->ID,
+			$row->post_modified_gmt,
+			$row->post_content
+		) );
 		if ( 1 !== $updated ) {
 			$reason    = false === $updated ? 'db error: ' . $wpdb->last_error : 'changed since read';
 			$skipped[] = "{$row->ID}\t{$row->post_name}\t(not written: $reason)";
@@ -334,16 +350,15 @@ if ( $survey ) {
 	if ( $rule['needle'] ) {
 		vvp_cleanup_print_groups( "Still containing \"{$rule['needle']}\" afterwards", $left );
 	}
-	return;
 }
 
-if ( $rule['needle'] ) {
+if ( $rule['needle'] && ! $survey ) {
 	WP_CLI::log( count( $leftover ) . " posts still contain \"{$rule['needle']}\"" . ( $leftover ? ':' : '.' ) );
 	foreach ( $leftover as $line ) {
 		WP_CLI::log( $line );
 	}
 }
-WP_CLI::log( count( $skipped ) . ' posts skipped' . ( $skipped ? ' (not written):' : '.' ) );
+WP_CLI::log( "\n" . count( $skipped ) . ' posts skipped' . ( $skipped ? ' (not written):' : '.' ) );
 foreach ( $skipped as $line ) {
 	WP_CLI::log( $line );
 }

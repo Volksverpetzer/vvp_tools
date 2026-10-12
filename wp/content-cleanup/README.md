@@ -14,7 +14,11 @@ when we did this by hand:
 - **No side effects:** writes go directly through `$wpdb`, so there are no revisions,
   no `post_modified` bump, and no `save_post` hooks or webhooks.
 - **Skips instead of damaging:** a post is skipped (never written) if a regex fails,
-  if the open/close tag balance would change, or if the post would end up empty.
+  if the open/close tag balance would change, if the post would end up empty, or if
+  it matches the rule's `skip_post_if` pattern. Skipped posts are always listed.
+- **Never overwrites edits:** `apply` only writes a post that is still byte-for-byte
+  what was read, with the same `post_modified_gmt`. A post saved in the meantime is
+  listed as skipped; run the tool again to pick it up.
 
 Rules so far:
 
@@ -28,7 +32,8 @@ Rules so far:
 1. **Write a rule.** Copy `rules/_template.php` to `rules/<name>.php` and fill in
    `like`, `needle` and `pattern`. Put a few real examples into `tests`.
 2. **Test locally.** No WordPress needed, only PHP 8.1+. If you have Local
-   installed, its bundled PHP works:
+   installed, its bundled PHP works. On the server, `wp eval-file cleanup.php <name> test`
+   does the same and exits with an error if a test fails:
    ```bash
    php cleanup.php <name> test
    ```
